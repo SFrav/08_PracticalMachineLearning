@@ -1,0 +1,77 @@
+---
+title: "MachineLearning"
+author: "Simon Fraval"
+date: "July 26, 2015"
+output: html_document
+---
+
+This machine learning task aims to utilise data from accelerometers attached to 6 participants lifting barbells in 5 different ways, both corretly and incorrectly. The original data is available here: <http://groupware.les.inf.puc-rio.br/har>.
+
+The 'caret' package in R will be utilised for this purpose. The package will assist in assessing predictors, comparing machine learning models and predicting the class of barbell lift type on a test set of 20 observations.
+To start, the caret package is loaded, as is the training and test datasets.
+```{r, message=FALSE}
+library("caret")
+training <- read.csv("pml-training.csv", na.strings = c("NA","#DIV/0!"))
+testing <- read.csv("pml-testing.csv", na.strings = c("NA","#DIV/0!") )
+```
+
+
+There are a number of variables in this set that contain little data and would not be enough to impute. Variables with more than half of the observations being NA or 'DIV#0' are removed as are non-activity monitor data. After these revisions the dataset contains 53 of the original 160 variables.
+```{r}
+training <- training[, (colSums(is.na(training)) < (nrow(training)/2))]
+#Remove user name as not an 'activity monitor'. Time and num window also removed on this basis, so as to be generalisable.
+#Also based on a TA comment "The aim of this project is to try to create a good classifier model that could potentially be used to analyse how well anyone is performing some exercise"
+training$user_name <- NULL
+training$new_window <- NULL
+training$raw_timestamp_part_1 <-NULL
+training$raw_timestamp_part_2 <-NULL
+training$cvtd_timestamp <- NULL
+training$num_window <- NULL
+training$X <- NULL
+```
+
+Zero variance variables and near zero variance variables were assessed, with none of the remaining variables falling into either of these categories. Therefore all 52 predictor variables were kept for training.
+```{r}
+nzv <- nearZeroVar(training, saveMetrics=T)
+nzv[nzv$zeroVar==TRUE|nzv$zeroVar==TRUE]
+```
+
+The accuracy of four models were assessed, namely: decision trees (rpart), k nearest neighbour, nnet and random forest. Default parameters were kept for each model.
+```{r, message=FALSE}
+#Decision trees
+modFit1<-train(classe~., method="rpart",data=training)
+
+#K nearest neighbour
+if (!file.exists("knnModelFinal.rds")) {
+  modFit2<-train(classe~., method="knn",data=training)
+} else {modFit2 <- readRDS("knnModelFinal.rds")}
+
+#nnet method
+if (!file.exists("nnetModelFinal.rds")) {
+  modFit3<-train(classe~., method="nnet",data=training)
+} else {modFit3 <- readRDS("nnetModelFinal.rds")}
+
+#Random tree method
+if (!file.exists("rtModelFinal.rds")) {
+  modFit<-train(classe~., method="rf",data=training)
+} else {modFit4 <- readRDS("rtModelFinal.rds")}
+
+#Compare accuracy
+data.frame(Model= c("rpart", "knn", "nnet", "rf"), Accuracy=c(modFit1$results$Accuracy[[1]],modFit2$results$Accuracy[[1]],modFit3$results$Accuracy[[1]],modFit4$results$Accuracy[[1]]))
+
+```
+
+The random forest model showed the greatest promise at `r round(modFit4$results$Accuracy[[1]]*100,2)`% accuracy and an expected out of sample error of `r round((1-modFit4$results$Accuracy[[1]])*100,2)`%.
+While it is considered best practice to seperate into training, validate and test in non-massive datasets, this was not done here. The reason for this was based on a point raised by a TA, that seperating validation sets based on outcome would tend to increase the apparent accuracy due to overlapping time windows in the training and test set. As the accuracy from the training set alone was the more conservative estimate, I took the score of `r round(modFit4$results$Accuracy[[1]]*100,2)`% to be sufficient to apply the model to the test set. 
+
+Further, the importance of the predictors used in the model are assesed as follows:
+```{r}
+varImp(modFit4)
+```
+All selected variables did have some influence on the model, some more than others.
+
+The test set is then predicted as follows:
+```{r, results='hide'}
+test_predict <- predict(modFit4, testing)
+```
+The predictions fulfilled the test set with 100% accuracy.
