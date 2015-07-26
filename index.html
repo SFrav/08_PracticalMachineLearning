@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="Practical machine learning : ">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>Practical machine learning</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/SFrav/08_PracticalMachineLearning">View on GitHub</a>
+
+          <h1 id="project_title">Practical machine learning</h1>
+          <h2 id="project_tagline"></h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/SFrav/08_PracticalMachineLearning/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/SFrav/08_PracticalMachineLearning/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <div id="header">
+<h1>
+<a id="machinelearning" class="anchor" href="#machinelearning" aria-hidden="true"><span class="octicon octicon-link"></span></a>MachineLearning</h1>
+<h4>
+<a id="july-26-2015" class="anchor" href="#july-26-2015" aria-hidden="true"><span class="octicon octicon-link"></span></a><em>July 26, 2015</em>
+</h4>
+</div>
+
+<p>This machine learning task aims to utilise data from accelerometers attached to 6 participants lifting barbells in 5 different ways, both corretly and incorrectly. The original data is available here: <a href="http://groupware.les.inf.puc-rio.br/har">http://groupware.les.inf.puc-rio.br/har</a>.</p>
+
+<p>The ‘caret’ package in R will be utilised for this purpose. The package will assist in assessing predictors, comparing machine learning models and predicting the class of barbell lift type on a test set of 20 observations. To start, the caret package is loaded, as is the training and test datasets.</p>
+
+<pre><code>library("caret")
+training &lt;- read.csv("pml-training.csv", na.strings = c("NA","#DIV/0!"))
+testing &lt;- read.csv("pml-testing.csv", na.strings = c("NA","#DIV/0!") )</code></pre>
+
+<p>There are a number of variables in this set that contain little data and would not be enough to impute. Variables with more than half of the observations being NA or ‘DIV#0’ are removed as are non-activity monitor data. After these revisions the dataset contains 53 of the original 160 variables.</p>
+
+<pre><code>training &lt;- training[, (colSums(is.na(training)) &lt; (nrow(training)/2))]
+#Remove user name as not an 'activity monitor'. Time and num window also removed on this basis, so as to be generalisable.
+#Also based on a TA comment "The aim of this project is to try to create a good classifier model that could potentially be used to analyse how well anyone is performing some exercise"
+training$user_name &lt;- NULL
+training$new_window &lt;- NULL
+training$raw_timestamp_part_1 &lt;-NULL
+training$raw_timestamp_part_2 &lt;-NULL
+training$cvtd_timestamp &lt;- NULL
+training$num_window &lt;- NULL
+training$X &lt;- NULL</code></pre>
+
+<p>Zero variance variables and near zero variance variables were assessed, with none of the remaining variables falling into either of these categories. Therefore all 52 predictor variables were kept for training.</p>
+
+<pre><code>nzv &lt;- nearZeroVar(training, saveMetrics=T)
+nzv[nzv$zeroVar==TRUE|nzv$zeroVar==TRUE]</code></pre>
+
+<pre><code>## data frame with 0 columns and 53 rows</code></pre>
+
+<p>The accuracy of four models were assessed, namely: decision trees (rpart), k nearest neighbour, nnet and random forest. Default parameters were kept for each model.</p>
+
+<pre><code>#Decision trees
+modFit1&lt;-train(classe~., method="rpart",data=training)
+
+#K nearest neighbour
+if (!file.exists("knnModelFinal.rds")) {
+  modFit2&lt;-train(classe~., method="knn",data=training)
+} else {modFit2 &lt;- readRDS("knnModelFinal.rds")}
+
+#nnet method
+if (!file.exists("nnetModelFinal.rds")) {
+  modFit3&lt;-train(classe~., method="nnet",data=training)
+} else {modFit3 &lt;- readRDS("nnetModelFinal.rds")}
+
+#Random tree method
+if (!file.exists("rtModelFinal.rds")) {
+  modFit&lt;-train(classe~., method="rf",data=training)
+} else {modFit4 &lt;- readRDS("rtModelFinal.rds")}
+
+#Compare accuracy
+data.frame(Model= c("rpart", "knn", "nnet", "rf"), Accuracy=c(modFit1$results$Accuracy[[1]],modFit2$results$Accuracy[[1]],modFit3$results$Accuracy[[1]],modFit4$results$Accuracy[[1]]))</code></pre>
+
+<pre><code>##   Model  Accuracy
+## 1 rpart 0.5042941
+## 2   knn 0.9049207
+## 3  nnet 0.3219429
+## 4    rf 0.9928512</code></pre>
+
+<p>The random forest model showed the greatest promise at 99.29% accuracy and an expected out of sample error of 0.71%. While it is considered best practice to seperate into training, validate and test in non-massive datasets, this was not done here. The reason for this was based on a point raised by a TA, that seperating validation sets based on outcome would tend to increase the apparent accuracy due to overlapping time windows in the training and test set. As the accuracy from the training set alone was the more conservative estimate, I took the score of 99.29% to be sufficient to apply the model to the test set.</p>
+
+<p>Further, the importance of the predictors used in the model are assesed as follows:</p>
+
+<pre><code>varImp(modFit4)</code></pre>
+
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+
+<pre><code>## rf variable importance
+## 
+##   only 20 most important variables shown (out of 52)
+## 
+##                   Overall
+## roll_belt          100.00
+## yaw_belt            79.90
+## magnet_dumbbell_z   67.39
+## magnet_dumbbell_y   63.61
+## pitch_belt          62.38
+## pitch_forearm       62.23
+## magnet_dumbbell_x   52.13
+## roll_forearm        51.66
+## accel_dumbbell_y    45.05
+## roll_dumbbell       43.27
+## magnet_belt_z       42.76
+## magnet_belt_y       42.25
+## accel_belt_z        41.58
+## accel_dumbbell_z    38.30
+## roll_arm            35.21
+## accel_forearm_x     34.13
+## gyros_belt_z        30.78
+## yaw_dumbbell        29.12
+## magnet_forearm_z    28.27
+## accel_dumbbell_x    28.10</code></pre>
+
+<p>All selected variables did have some influence on the model, some more than others.</p>
+
+<p>The test set is then predicted as follows:</p>
+
+<pre><code>test_predict &lt;- predict(modFit4, testing)</code></pre>
+
+<p>The predictions fulfilled the test set with 100% accuracy.</p>
+
+<p></p>
+
+
+
+
+
+
+
+<p></p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">Practical machine learning maintained by <a href="https://github.com/SFrav">SFrav</a></p>
+        <p>Published with <a href="https://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
